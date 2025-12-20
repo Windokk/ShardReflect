@@ -1,6 +1,12 @@
 cd build
-./PulseReflect --gcc /usr/lib/gcc/x86_64-pc-linux-gnu/15.2.1 \
+./PulseReflect --clang /usr/lib/clang/21 \
                --cpp /usr/include/c++/15.2.1 \
-               -I /home/windokk/Documents/GitHub/Pulse/src \
                -f /home/windokk/Documents/GitHub/Pulse/src/engine/ecs/components/misc/transform.hpp \
-               -I /home/windokk/Documents/GitHub/Pulse/submodules/json/single_include
+               --dir /home/windokk/Documents/GitHub/Pulse/src/engine/ecs/components/misc/ \
+               -I /home/windokk/Documents/GitHub/Pulse/src \
+               -I /home/windokk/Documents/GitHub/Pulse/submodules/json/single_include \
+               -I /home/windokk/Documents/GitHub/Pulse/submodules/jolt \
+               -I /home/windokk/Documents/GitHub/Pulse/submodules/glm \
+               -I /home/windokk/Documents/GitHub/Pulse/submodules/freetype/include
+
+# Note : Replace /home/windokk/Documents/GitHub/Pulse... by the path to your Pulse installation

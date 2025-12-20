@@ -11,13 +11,13 @@ namespace fs = std::filesystem;
 
 static llvm::cl::OptionCategory ToolCategory("pulse-reflect options");
 static llvm::cl::opt<std::string> FileOpt("f", llvm::cl::desc("Single file"));
-static llvm::cl::opt<std::string> DirOpt("dir", llvm::cl::desc("Directory to scan"));
+static llvm::cl::list<std::string> DirList("dir", llvm::cl::desc("Directory to scan (can specify multiple)"), llvm::cl::ZeroOrMore);
 static llvm::cl::opt<bool> RecursiveOpt("recursive", llvm::cl::desc("Recurse into directories"));
-static llvm::cl::opt<std::string> GCCPathOpt("gcc",llvm::cl::desc("Path to GCC toolchain root"),llvm::cl::Required);
+static llvm::cl::opt<std::string> ClangPathOpt("clang",llvm::cl::desc("Path to Clang lib root"),llvm::cl::Required);
 static llvm::cl::opt<std::string> CPPPathOpt("cpp",llvm::cl::desc("Path to C++ standard library headers"),llvm::cl::Required);
 static llvm::cl::list<std::string> IncludeDirs(
     "I",
-    llvm::cl::desc("Project include directories (can specify multiple, mandatory)"),
+    llvm::cl::desc("Engine include directories (can specify multiple, mandatory)"),
     llvm::cl::Required,
     llvm::cl::ZeroOrMore
 );
@@ -34,12 +34,14 @@ void collectFiles(const std::filesystem::path &path, bool recursive, std::vector
     if (recursive) {
         for (auto &entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
+                if(entry.path().extension().string() != ".hpp" || entry.path().string().find(".reflection.hpp") != std::string::npos) continue;
                 outFiles.push_back(entry.path().string());
             }
         }
     } else {
         for (auto &entry : std::filesystem::directory_iterator(path)) {
             if (entry.is_regular_file()) {
+                if(entry.path().extension().string() != ".hpp" || entry.path().string().find(".reflection.hpp") != std::string::npos) continue;
                 outFiles.push_back(entry.path().string());
             }
         }
@@ -63,6 +65,14 @@ public:
     }
 };
 
+void remove_duplicates(std::vector<std::string>& vec) {
+    
+    std::sort(vec.begin(), vec.end());
+
+    auto last = std::unique(vec.begin(), vec.end());
+
+    vec.erase(last, vec.end());
+}
 
 int main(int argc, const char **argv) {
     llvm::cl::ParseCommandLineOptions(argc, argv, "PulseReflect tool\n");
@@ -71,7 +81,9 @@ int main(int argc, const char **argv) {
     std::vector<std::string> files;
 
     if (!FileOpt.empty()) files.push_back(FileOpt);
-    if (!DirOpt.empty()) collectFiles(DirOpt.getValue(), RecursiveOpt, files);
+    for(const auto &dir : DirList){
+        collectFiles(dir, RecursiveOpt, files);
+    }
 
     if (files.empty()) {
         llvm::errs() << "No files specified!\n";
@@ -81,15 +93,19 @@ int main(int argc, const char **argv) {
     std::vector<std::string> defaultFlags = {
         "-std=c++17",
         "--target=x86_64-pc-linux-gnu",
-        "--gcc-toolchain=" + GCCPathOpt,
-        "-isystem", GCCPathOpt + "/include",
-        "-isystem", GCCPathOpt + "/include-fixed",
         "-isystem", CPPPathOpt,
         "-isystem", CPPPathOpt + "/x86_64-pc-linux-gnu",
+        "-resource-dir="+ClangPathOpt
     };
 
     for (const auto &dir : IncludeDirs) {
         defaultFlags.push_back("-I" + dir);
+    }
+
+    remove_duplicates(files);
+
+    for(std::string file : files){
+        llvm::outs() << "Generating reflection for file: " << file << "\n";
     }
 
     FixedCompilationDatabase Compilations(".", defaultFlags);
