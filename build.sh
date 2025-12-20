@@ -1,4 +1,4 @@
-cmake -S . -B build -G Ninja
+cmake -S . -B build -G "Unix Makefiles"
 cd build
 cmake --build .
 cd ..
