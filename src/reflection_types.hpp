@@ -90,7 +90,7 @@ static TypeID GetTypeIDFromString(const std::string& typeName) {
         // Boolean
         {"bool", TypeID::Bool},
 
-        // Math vectors (glm / custom)
+        // Math vectors (glm)
         {"glm::vec2", TypeID::Vec2},
         {"glm::vec3", TypeID::Vec3},
         {"glm::vec4", TypeID::Vec4},
