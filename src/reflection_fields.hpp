@@ -53,6 +53,10 @@ public:
         if (!ClassDecl || !ClassDecl->isThisDeclarationADefinition())
             return;
 
+        const auto &SM = *Result.SourceManager;
+        if (!SM.isWrittenInMainFile(ClassDecl->getLocation()))
+            return;
+
         std::string headerFile = ClassDecl->getASTContext().getSourceManager().getFilename(ClassDecl->getLocation()).str();
         if (headerFile.empty())
             return;
