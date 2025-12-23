@@ -2,6 +2,8 @@
 
 A reflection tool for the Pulse Game Engine
 
+Works for Linux and Windows (MinGW)
+
 ## Example : 
 
 [Example run script]("https://github.com/Windokk/PulseReflect/blob/main/run.sh")

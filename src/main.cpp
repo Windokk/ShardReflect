@@ -108,13 +108,34 @@ int main(int argc, const char **argv) {
         return 1;
     }
 
-    std::vector<std::string> defaultFlags = {
+    std::vector<std::string> defaultFlags;
+
+#ifdef _WIN32
+    // ---- Windows (MinGW) ----
+    defaultFlags = {
+        "-std=c++17",
+        "--target=x86_64-w64-windows-gnu",
+
+        // MinGW C++ standard library and system headers
+        "-isystem", CPPPathOpt + "/include",
+        "-isystem", CPPPathOpt + "/x86_64-w64-mingw32/include",
+
+        // Clang internal headers
+        "-resource-dir=" + ClangPathOpt
+    };
+
+#else
+    // ---- Linux ----
+    defaultFlags = {
         "-std=c++17",
         "--target=x86_64-pc-linux-gnu",
+
         "-isystem", CPPPathOpt,
         "-isystem", CPPPathOpt + "/x86_64-pc-linux-gnu",
-        "-resource-dir="+ClangPathOpt
+
+        "-resource-dir=" + ClangPathOpt
     };
+#endif
 
     for (const auto &include : IncludeDirs) {
         for (const auto& dir : ParseIncludeDirs(include)) {

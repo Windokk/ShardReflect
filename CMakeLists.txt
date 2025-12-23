@@ -15,7 +15,9 @@ find_package(Clang REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in ${LLVM_DIR}")
 
-include_directories(${LLVM_INCLUDE_DIRS} "/usr/lib/gcc/x86_64-pc-linux-gnu/15.2.1/include/")
+set(GCC_INC_DIR "" CACHE PATH "Path to gcc's include dir")
+
+include_directories(${LLVM_INCLUDE_DIRS} ${GCC_INC_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 
 # Your executable
