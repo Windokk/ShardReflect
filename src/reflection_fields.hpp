@@ -45,6 +45,11 @@ struct FieldInfo {
     float max;                // Optional max value for editor widgets
 };
 
+struct ComponentDescriptor{
+    std::string name;
+    std::vector<FieldInfo*> fields;
+};
+
 // Field reflection handler
 class FieldHandler : public MatchFinder::MatchCallback {
 public:
@@ -86,6 +91,7 @@ public:
             std::string copyFuncName = "";
             std::string equalsFuncName = "";
             std::string customTypeName = "";
+            std::string range = "";
 
             for (auto *Attr : Field->attrs()) {
                 if (const auto *AA = dyn_cast<AnnotateAttr>(Attr)) {
@@ -103,6 +109,7 @@ public:
                         else if (token.find("copy=") == 0) copyFuncName = token.substr(5);
                         else if (token.find("equals=") == 0) equalsFuncName = token.substr(7);
                         else if (token.find("type=") == 0) customTypeName = token.substr(5);
+                        else if (token.find("range=") == 0) range = token.substr(6);
                     }
                 }
             }
@@ -111,7 +118,13 @@ public:
 
             uint64_t offsetBits = Result.Context->getFieldOffset(Field);
             uint32_t offsetBytes = static_cast<uint32_t>(offsetBits / 8);
-            std::string flags = isEditable ? "FIELD_EDITABLE" : "FIELD_READONLY";
+            std::string flags = "";
+            if(isEditable){
+                flags = "Editable";
+            }
+            else if(isReadOnly){
+                flags = "ReadOnly";
+            }
 
             std::string fieldName = Field->getNameAsString();
             std::string typeName = Field->getType().getAsString();
@@ -125,12 +138,14 @@ public:
             out << "    " << (copyFuncName.empty() ? "nullptr" : copyFuncName) << ",\n";
             out << "    " << (equalsFuncName.empty() ? "nullptr" : equalsFuncName) << ",\n";
             out << "    " << flags << ",\n";
-            out << "    0.0f, 0.0f\n";
+            out << "    " << range << "\n";
             out << "};\n\n";
         }
 
-        out << "// Array of fields\n";
-        out << "FieldInfo* " << ClassDecl->getNameAsString() << "_fields[] = {\n";
+        out << "ComponentDescriptor " << ClassDecl->getNameAsString() << "_descriptor = {\n";
+        out << "    \"" << ClassDecl->getNameAsString() << "\",\n";
+        out << "    {\n";
+
         for (const auto *Field : ClassDecl->fields()) {
             bool isEditable = false;
             bool isReadOnly = false;
@@ -141,25 +156,23 @@ public:
                     std::istringstream ss(annotation);
                     std::string token;
                     while (std::getline(ss, token, ',')) {
-                        token.erase(0, token.find_first_not_of(" \t")); // trim
-                        token.erase(token.find_last_not_of(" \t")+1);
+                        token.erase(0, token.find_first_not_of(" \t"));
+                        token.erase(token.find_last_not_of(" \t") + 1);
 
                         if (token == "Editable") isEditable = true;
                         else if (token == "ReadOnly") isReadOnly = true;
                     }
                 }
             }
+
             if (!isEditable && !isReadOnly) continue;
 
-            out << "    &" << Field->getNameAsString() << "_info,\n";
+            out << "        &" << Field->getNameAsString() << "_info,\n";
         }
-        out << "};\n\n";
 
-        out << "ComponentDescriptor " << ClassDecl->getNameAsString() << "_descriptor = {\n";
-        out << "    \"" << ClassDecl->getNameAsString() << "\",\n";
-        out << "    sizeof(" << ClassDecl->getNameAsString() << "_fields)/sizeof(FieldInfo*),\n";
-        out << "    " << ClassDecl->getNameAsString() << "_fields\n";
+        out << "    }\n";
         out << "};\n";
+
 
         out.close();
         llvm::outs() << "Generated reflection: " << outputFile << "\n";

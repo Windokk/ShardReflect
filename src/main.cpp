@@ -22,8 +22,27 @@ static llvm::cl::list<std::string> IncludeDirs(
     llvm::cl::ZeroOrMore
 );
 
+std::vector<std::string> ParseIncludeDirs(const std::string &Dirs) {
+    std::vector<std::string> result;
+    std::stringstream ss(Dirs);
+    std::string dir;
 
-void collectFiles(const std::filesystem::path &path, bool recursive, std::vector<std::string> &outFiles) {
+    // Split by semicolon
+    while (std::getline(ss, dir, ';')) {
+        // Trim spaces (if any) around directory names
+        dir.erase(dir.find_last_not_of(" \t") + 1);  // trim trailing spaces
+        dir.erase(0, dir.find_first_not_of(" \t"));   // trim leading spaces
+        
+        // Avoid empty entries
+        if (!dir.empty()) {
+            result.push_back(dir);
+        }
+    }
+
+    return result;
+}
+
+void CollectFiles(const std::filesystem::path &path, bool recursive, std::vector<std::string> &outFiles) {
     if (!std::filesystem::exists(path)) return;
 
     if (std::filesystem::is_regular_file(path)) {
@@ -48,7 +67,6 @@ void collectFiles(const std::filesystem::path &path, bool recursive, std::vector
     }
 }
 
-
 class ReflectionFrontendAction : public ASTFrontendAction {
     FieldHandler Handler;
     MatchFinder Finder;
@@ -65,7 +83,7 @@ public:
     }
 };
 
-void remove_duplicates(std::vector<std::string>& vec) {
+void Remove_duplicates(std::vector<std::string>& vec) {
     
     std::sort(vec.begin(), vec.end());
 
@@ -82,7 +100,7 @@ int main(int argc, const char **argv) {
 
     if (!FileOpt.empty()) files.push_back(FileOpt);
     for(const auto &dir : DirList){
-        collectFiles(dir, RecursiveOpt, files);
+        CollectFiles(dir, RecursiveOpt, files);
     }
 
     if (files.empty()) {
@@ -98,11 +116,14 @@ int main(int argc, const char **argv) {
         "-resource-dir="+ClangPathOpt
     };
 
-    for (const auto &dir : IncludeDirs) {
-        defaultFlags.push_back("-I" + dir);
+    for (const auto &include : IncludeDirs) {
+        for (const auto& dir : ParseIncludeDirs(include)) {
+            defaultFlags.push_back("-I");  // Add -I as a separate argument
+            defaultFlags.push_back(dir);   // Add the directory as a separate argument
+        }
     }
 
-    remove_duplicates(files);
+    Remove_duplicates(files);
 
     for(std::string file : files){
         llvm::outs() << "Generating reflection for file: " << file << "\n";
