@@ -24,7 +24,7 @@ add_definitions(${LLVM_DEFINITIONS})
 add_executable(PulseReflect src/main.cpp)
 
 # Disable RTTI if needed
-target_compile_options(PulseReflect PRIVATE -fno-rtti)
+#target_compile_options(PulseReflect PRIVATE -fno-rtti)
 
 # Link clang tooling
 target_link_libraries(PulseReflect

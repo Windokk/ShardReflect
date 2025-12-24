@@ -5,6 +5,8 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <map>
+#include <set>
 
 #include "clang/Tooling/Tooling.h"
 #include "clang/Tooling/CommonOptionsParser.h"
@@ -18,6 +20,29 @@ using namespace clang::tooling;
 enum FieldFlags : uint32_t {
     Editable     = 1 << 0,
     ReadOnly     = 1 << 1
+};
+
+struct Container{
+    // element info
+    TypeID elementType;
+    size_t elementSize;
+
+    // common queries
+    size_t (*size)(void* container);
+    bool   (*isAssociative)();
+
+    // SEQUENTIAL containers (vectors)
+    void* (*getByIndex)(void* container, size_t index);
+    void  (*insertAt)(void* container, size_t index, const void* element);
+    void  (*eraseAt)(void* container, size_t index);
+
+    // ASSOCIATIVE containers (map, set)
+    void* (*findByKey)(void* container, const void* key);
+    void  (*insertByKey)(void* container, const void* key, const void* value);
+    void  (*eraseByKey)(void* container, const void* key);
+
+    // lifecycle
+    void (*clear)(void* container);
 };
 
 struct FieldInfo {
@@ -43,12 +68,120 @@ struct FieldInfo {
     uint32_t flags;           // Editable / ReadOnly
     float min;                // Optional min value for editor widgets
     float max;                // Optional max value for editor widgets
+
+    const Container* container = nullptr;
+    const EnumDescriptor* enumDesc = nullptr;
 };
 
 struct ComponentDescriptor{
     std::string name;
     std::vector<FieldInfo*> fields;
 };
+
+template<typename T>
+Container MakeVectorContainer() {
+    static Container container {
+        // elementType 
+        GetTypeIDFromString(typeid(T).name()),
+
+        // elementSize
+        sizeof(T),
+
+        // size
+        [](void* container) -> size_t {
+            return static_cast<std::vector<T>*>(container)->size();
+        },
+
+        // isAssociative
+        []() { return false; },
+
+        // getByIndex
+        [](void* container, size_t i) -> void* {
+            return &(*static_cast<std::vector<T>*>(container))[i];
+        },
+
+        // insertAt
+        [](void* container, size_t i, const void* v) {
+            auto& cont = *static_cast<std::vector<T>*>(container);
+            cont.insert(cont.begin() + i, *static_cast<const T*>(v));
+        },
+
+        // eraseAt
+        [](void* container, size_t i) {
+            auto& cont = *static_cast<std::vector<T>*>(container);
+            cont.erase(cont.begin() + i);
+        },
+
+        // findByKey
+        nullptr,
+        // insertByKey
+        nullptr,
+        // eraseByKey
+        nullptr,
+
+        // clear
+        [](void* container) {
+            static_cast<std::vector<T>*>(container)->clear();
+        }
+    };
+
+    return container;
+}
+
+template<typename K, typename V>
+Container MakeMapContainer() {
+    static Container container {
+        // elementType 
+        GetTypeIDFromString(typeid(V).name()),
+
+        // elementSize
+        sizeof(V),
+
+        // size
+        [](void* c) -> size_t {
+            return static_cast<std::map<K, V>*>(c)->size();
+        },
+
+        // isAssociative
+        []() { return true; },
+
+        // getByIndex
+        nullptr,
+
+        // insertAt
+        nullptr,
+
+        // eraseAt
+        nullptr,
+
+        // findByKey
+        [](void* container, const void* key) -> void* {
+            auto& m = *static_cast<std::map<K,V>*>(container);
+            auto it = m.find(*static_cast<const K*>(key));
+            return it == m.end() ? nullptr : &it->second;
+        },
+
+        /* insertByKey */
+        [](void* container, const void* key, const void* value) {
+            auto& m = *static_cast<std::map<K,V>*>(container);
+            m[*static_cast<const K*>(key)] =
+                *static_cast<const V*>(value);
+        },
+
+        /* eraseByKey */
+        [](void* container, const void* key) {
+            static_cast<std::map<K,V>*>(container)->erase(
+                *static_cast<const K*>(key));
+        },
+
+        /* clear */
+        [](void* container) {
+            static_cast<std::map<K,V>*>(container)->clear();
+        }
+    };
+
+    return container;
+}
 
 // Field reflection handler
 class FieldHandler : public MatchFinder::MatchCallback {
@@ -77,11 +210,11 @@ public:
             return;
         }
         out << "#include \""+headerFilenameWithExt+"\"\n";
-        out << "#include \"engine/core/reflection_types.hpp\"\n\n";
+        out << "#include \"engine/core/reflection_fields.hpp\"\n\n";
 
         out << "//Reflection for component : " << ClassDecl->getNameAsString() << "\n\n";
 
-        for (const auto *Field : ClassDecl->fields()) {
+        for (const auto *field : ClassDecl->fields()) {
 
             bool isEditable = false;
             bool isReadOnly = false;
@@ -93,9 +226,9 @@ public:
             std::string customTypeName = "";
             std::string range = "";
 
-            for (auto *Attr : Field->attrs()) {
-                if (const auto *AA = dyn_cast<AnnotateAttr>(Attr)) {
-                    std::string annotation = AA->getAnnotation().str();
+            for (auto *attr : field->attrs()) {
+                if (const auto *aa = dyn_cast<AnnotateAttr>(attr)) {
+                    std::string annotation = aa->getAnnotation().str();
                     std::istringstream ss(annotation);
                     std::string token;
                     while (std::getline(ss, token, ',')) {
@@ -116,7 +249,7 @@ public:
 
             if ((!isEditable && !isReadOnly) || (isEditable && isReadOnly)) continue;
 
-            uint64_t offsetBits = Result.Context->getFieldOffset(Field);
+            uint64_t offsetBits = Result.Context->getFieldOffset(field);
             uint32_t offsetBytes = static_cast<uint32_t>(offsetBits / 8);
             std::string flags = "";
             if(isEditable){
@@ -126,9 +259,49 @@ public:
                 flags = "ReadOnly";
             }
 
-            std::string fieldName = Field->getNameAsString();
-            std::string typeName = Field->getType().getAsString();
+            std::string typeName = field->getType().getAsString();
+            bool isVector = typeName.find("std::vector") != std::string::npos;
+            bool isMap    = typeName.find("std::map") != std::string::npos;
+            bool isSet    = typeName.find("std::set") != std::string::npos;
+            bool isEnum = field->getType()->isEnumeralType();
 
+            std::string fieldName = field->getNameAsString();
+            std::string containerVarName = fieldName + "_container";
+            std::string enumDescVar = "";
+
+            if (isVector) {
+                out << "static Container " << containerVarName << " = MakeVectorContainer<"
+                    << typeName.c_str() << ">();\n";
+            }
+            else if (isMap) {
+                // extract key and value type from string "std::map<K,V>"
+                std::string inner = typeName.substr(typeName.find('<') + 1);
+                inner = inner.substr(0, inner.find('>')); // "K,V"
+                size_t comma = inner.find(',');
+                std::string keyType = inner.substr(0, comma);
+                std::string valueType = inner.substr(comma+1);
+
+                out << "static Container " << containerVarName << " = MakeMapContainer<"
+                    << keyType << "," << valueType << ">();\n";
+            }
+            else if(isEnum) {
+                const EnumDecl* enumDecl = field->getType()->getAs<EnumType>()->getDecl();
+                std::string enumName = enumDecl->getNameAsString();
+
+                enumDescVar = enumName + "_descriptor";
+                out << "static EnumDescriptor " << enumDescVar << " = {\n";
+                out << "    \"" << enumName << "\",\n";
+                out << "    {\n";
+
+                for (auto* enumerator : enumDecl->enumerators()) {
+                    out << "        { \"" << enumerator->getNameAsString() << "\", "
+                        << enumerator->getInitVal().getSExtValue() << " },\n";
+                }
+
+                out << "    }\n";
+                out << "};\n";
+            }
+            
             out << "FieldInfo " << fieldName << "_info = {\n";
             out << "    \"" << fieldName << "\",\n";
             out << "    TypeID::" << GetStringFromTypeID(GetTypeIDFromString(customTypeName.empty() ? typeName : customTypeName)) << ",\n";
@@ -138,7 +311,9 @@ public:
             out << "    " << (copyFuncName.empty() ? "nullptr" : copyFuncName) << ",\n";
             out << "    " << (equalsFuncName.empty() ? "nullptr" : equalsFuncName) << ",\n";
             out << "    " << flags << ",\n";
-            out << "    " << range << "\n";
+            out << "    " << (range == "" ? "0,0": range) << ",\n";
+            out << "    " << ((isVector || isMap) ? ("&" + containerVarName) : "nullptr") << ",\n";
+            out << "    " << (isEnum ? ("&" + enumDescVar) : "nullptr") << "\n";
             out << "};\n\n";
         }
 

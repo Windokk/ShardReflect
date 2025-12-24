@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <algorithm>
+#include <vector>
 
 enum class TypeID : uint16_t {
     // Invalid / base
@@ -59,15 +60,22 @@ enum class TypeID : uint16_t {
     CString,       // const char*
 
     // Containers
-    // (editor usually handles these specially)
-    Array,
     Vector,
     Map,
-    Set,
 
     // User-defined / fallback
     Struct,
     Enum
+};
+
+struct EnumValueInfo {
+    const char* name;
+    int value; // underlying integer value
+};
+
+struct EnumDescriptor {
+    std::string name;
+    std::vector<EnumValueInfo> values;
 };
 
 static TypeID GetTypeIDFromString(const std::string& typeName) {
@@ -120,10 +128,8 @@ static TypeID GetTypeIDFromString(const std::string& typeName) {
         {"const char*", TypeID::CString},
 
         // Containers
-        {"array", TypeID::Array},
         {"vector", TypeID::Vector},
         {"map", TypeID::Map},
-        {"set", TypeID::Set},
 
         // User-defined / fallback
         {"struct", TypeID::Struct},
@@ -190,10 +196,8 @@ static std::string GetStringFromTypeID(TypeID type) {
         case TypeID::CString: return "CString";
 
         // Containers
-        case TypeID::Array: return "Array";
         case TypeID::Vector: return "Vector";
         case TypeID::Map: return "Map";
-        case TypeID::Set: return "Set";
 
         // User-defined / fallback
         case TypeID::Struct: return "Struct";
@@ -201,4 +205,45 @@ static std::string GetStringFromTypeID(TypeID type) {
     }
 
     return "Unknown"; // fallback, should never hit
+}
+
+inline size_t GetTypeSize(TypeID type) {
+    switch (type) {
+        case TypeID::Int8:   return sizeof(int8_t);
+        case TypeID::Int16:  return sizeof(int16_t);
+        case TypeID::Int32:  return sizeof(int32_t);
+        case TypeID::Int64:  return sizeof(int64_t);
+        case TypeID::UInt8:  return sizeof(uint8_t);
+        case TypeID::UInt16: return sizeof(uint16_t);
+        case TypeID::UInt32: return sizeof(uint32_t);
+        case TypeID::UInt64: return sizeof(uint64_t);
+        case TypeID::Float:  return sizeof(float);
+        case TypeID::Double: return sizeof(double);
+        case TypeID::Bool:   return sizeof(bool);
+
+        case TypeID::Vec2: return sizeof(float) * 2;
+        case TypeID::Vec3: return sizeof(float) * 3;
+        case TypeID::Vec4: return sizeof(float) * 4;
+        case TypeID::IVec2: return sizeof(int) * 2;
+        case TypeID::IVec3: return sizeof(int) * 3;
+        case TypeID::IVec4: return sizeof(int) * 4;
+        case TypeID::UVec2: return sizeof(uint64_t) * 2;
+        case TypeID::UVec3: return sizeof(uint64_t) * 3;
+        case TypeID::UVec4: return sizeof(uint64_t) * 4;
+
+        case TypeID::Mat2: return sizeof(float) * 4;
+        case TypeID::Mat3: return sizeof(float) * 9;
+        case TypeID::Mat4: return sizeof(float) * 16;
+
+        case TypeID::Quat: return sizeof(float) * 4;
+
+        case TypeID::ColorRGB: return sizeof(float) * 3;
+        case TypeID::ColorRGBA: return sizeof(float) * 4;
+
+        case TypeID::String: return sizeof(std::string);
+        case TypeID::CString: return sizeof(char*);
+
+        default:
+            return 0; // containers / structs handled separately
+    }
 }
