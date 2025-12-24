@@ -76,7 +76,6 @@ public:
             llvm::errs() << "Failed to open file: " << outputFile << "\n";
             return;
         }
-        out << "#include \"" << headerFilenameWithExt << "\"\n";
         out << "#include \"engine/core/reflection_types.hpp\"\n\n";
 
         out << "//Reflection for component : " << ClassDecl->getNameAsString() << "\n\n";
