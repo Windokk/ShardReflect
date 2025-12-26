@@ -302,7 +302,7 @@ public:
                 out << "};\n";
             }
             
-            out << "FieldInfo " << fieldName << "_info = {\n";
+            out << "FieldInfo " << ClassDecl->getNameAsString() << "_" <<fieldName << "_info = {\n";
             out << "    \"" << fieldName << "\",\n";
             out << "    TypeID::" << GetStringFromTypeID(GetTypeIDFromString(customTypeName.empty() ? typeName : customTypeName)) << ",\n";
             out << "    " << offsetBytes << ",\n";
@@ -317,17 +317,17 @@ public:
             out << "};\n\n";
         }
 
-        out << "ComponentDescriptor " << ClassDecl->getNameAsString() << "_descriptor = {\n";
+        out << "ComponentDescriptor " << ClassDecl->getQualifiedNameAsString() << "::descriptor = {\n";
         out << "    \"" << ClassDecl->getNameAsString() << "\",\n";
         out << "    {\n";
 
-        for (const auto *Field : ClassDecl->fields()) {
+        for (const auto *field : ClassDecl->fields()) {
             bool isEditable = false;
             bool isReadOnly = false;
 
-            for (auto *Attr : Field->attrs()) {
-                if (const auto *AA = dyn_cast<AnnotateAttr>(Attr)) {
-                    std::string annotation = AA->getAnnotation().str();
+            for (auto *Attr : field->attrs()) {
+                if (const auto *aa = dyn_cast<AnnotateAttr>(Attr)) {
+                    std::string annotation = aa->getAnnotation().str();
                     std::istringstream ss(annotation);
                     std::string token;
                     while (std::getline(ss, token, ',')) {
@@ -340,9 +340,9 @@ public:
                 }
             }
 
-            if (!isEditable && !isReadOnly) continue;
+            if ((!isEditable && !isReadOnly) || (isEditable && isReadOnly)) continue;
 
-            out << "        &" << Field->getNameAsString() << "_info,\n";
+            out << "        &" << ClassDecl->getNameAsString() << "_" <<field->getNameAsString() << "_info,\n";
         }
 
         out << "    }\n";
