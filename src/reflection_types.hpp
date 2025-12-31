@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+#include <iostream>
 
 enum class TypeID : uint16_t {
     // Invalid / base
@@ -78,7 +79,25 @@ struct EnumDescriptor {
     std::vector<EnumValueInfo> values;
 };
 
-static TypeID GetTypeIDFromString(const std::string& typeName) {
+static TypeID GetTypeIDFromString(std::string typeName) {
+    // Remove const/reference/pointer noise
+    auto normalize = [](std::string& s) {
+        s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
+        if (s.compare(0, 4, "const") == 0)
+            s = s.substr(5);
+        if (!s.empty() && (s.back() == '&' || s.back() == '*'))
+            s.pop_back();
+    };
+
+    normalize(typeName);
+
+    // Template detection
+    if (typeName.compare(0, 12, "std::vector<") == 0)
+        return TypeID::Vector;
+
+    if (typeName.compare(0, 8, "std::map<") == 0)
+        return TypeID::Map;
+
     static const std::unordered_map<std::string, TypeID> typeMap = {
         // Integer types
         {"int8_t", TypeID::Int8},
@@ -127,19 +146,14 @@ static TypeID GetTypeIDFromString(const std::string& typeName) {
         {"std::string", TypeID::String},
         {"const char*", TypeID::CString},
 
-        // Containers
-        {"vector", TypeID::Vector},
-        {"map", TypeID::Map},
-
-        // User-defined / fallback
+        // User-defined
         {"struct", TypeID::Struct},
         {"enum", TypeID::Enum},
     };
 
-    auto it = typeMap.find(typeName);
-    if (it != typeMap.end()) {
+    if (auto it = typeMap.find(typeName); it != typeMap.end())
         return it->second;
-    }
+
     return TypeID::Unknown; // fallback if not found
 }
 

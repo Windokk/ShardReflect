@@ -27,9 +27,15 @@ struct Container{
     TypeID elementType;
     size_t elementSize;
 
+    TypeID editorElementType;
+
     // common queries
     size_t (*size)(void* container);
     bool   (*isAssociative)();
+
+    // element conversion
+    void (*elementRead)(const void* element, void* outEditorValue);
+    void (*elementWrite)(void* element, const void* editorValue);
 
     // SEQUENTIAL containers (vectors)
     void* (*getByIndex)(void* container, size_t index);
@@ -78,112 +84,161 @@ struct ComponentDescriptor{
     std::vector<FieldInfo*> fields;
 };
 
-template<typename T>
-Container MakeVectorContainer() {
-    static Container container {
-        // elementType 
-        GetTypeIDFromString(typeid(T).name()),
+template<typename StorageT, typename EditorT = StorageT>
+Container MakeVectorContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, const void*) = nullptr) {
+    Container c{};
 
-        // elementSize
-        sizeof(T),
+    c.elementType = GetTypeIDFromString(typeid(StorageT).name());
+    c.elementSize = sizeof(StorageT);
+    c.editorElementType = GetTypeIDFromString(typeid(EditorT).name());
 
-        // size
-        [](void* container) -> size_t {
-            return static_cast<std::vector<T>*>(container)->size();
-        },
+    if constexpr (std::is_same_v<StorageT, EditorT>) {
+        c.elementRead = elementRead ? elementRead :
+            [](const void* e, void* out) {
+                *static_cast<EditorT*>(out) =
+                    *static_cast<const StorageT*>(e);
+            };
 
-        // isAssociative
-        []() { return false; },
+        c.elementWrite = elementWrite ? elementWrite :
+            [](void* e, const void* in) {
+                *static_cast<StorageT*>(e) =
+                    *static_cast<const EditorT*>(in);
+            };
+    } else {
+        c.elementRead = elementRead;
+        c.elementWrite = elementWrite;
+    }
 
-        // getByIndex
-        [](void* container, size_t i) -> void* {
-            return &(*static_cast<std::vector<T>*>(container))[i];
-        },
-
-        // insertAt
-        [](void* container, size_t i, const void* v) {
-            auto& cont = *static_cast<std::vector<T>*>(container);
-            cont.insert(cont.begin() + i, *static_cast<const T*>(v));
-        },
-
-        // eraseAt
-        [](void* container, size_t i) {
-            auto& cont = *static_cast<std::vector<T>*>(container);
-            cont.erase(cont.begin() + i);
-        },
-
-        // findByKey
-        nullptr,
-        // insertByKey
-        nullptr,
-        // eraseByKey
-        nullptr,
-
-        // clear
-        [](void* container) {
-            static_cast<std::vector<T>*>(container)->clear();
-        }
+    c.size = [](void* c) -> size_t {
+        return static_cast<std::vector<StorageT>*>(c)->size();
     };
 
-    return container;
-}
+    c.isAssociative = []() { return false; };
 
-template<typename K, typename V>
-Container MakeMapContainer() {
-    static Container container {
-        // elementType 
-        GetTypeIDFromString(typeid(V).name()),
-
-        // elementSize
-        sizeof(V),
-
-        // size
-        [](void* c) -> size_t {
-            return static_cast<std::map<K, V>*>(c)->size();
-        },
-
-        // isAssociative
-        []() { return true; },
-
-        // getByIndex
-        nullptr,
-
-        // insertAt
-        nullptr,
-
-        // eraseAt
-        nullptr,
-
-        // findByKey
-        [](void* container, const void* key) -> void* {
-            auto& m = *static_cast<std::map<K,V>*>(container);
-            auto it = m.find(*static_cast<const K*>(key));
-            return it == m.end() ? nullptr : &it->second;
-        },
-
-        /* insertByKey */
-        [](void* container, const void* key, const void* value) {
-            auto& m = *static_cast<std::map<K,V>*>(container);
-            m[*static_cast<const K*>(key)] =
-                *static_cast<const V*>(value);
-        },
-
-        /* eraseByKey */
-        [](void* container, const void* key) {
-            static_cast<std::map<K,V>*>(container)->erase(
-                *static_cast<const K*>(key));
-        },
-
-        /* clear */
-        [](void* container) {
-            static_cast<std::map<K,V>*>(container)->clear();
-        }
+    c.getByIndex = [](void* c, size_t i) -> void* {
+        return &(*static_cast<std::vector<StorageT>*>(c))[i];
     };
 
-    return container;
+    c.insertAt = [](void* c, size_t i, const void* v) {
+        auto& vec = *static_cast<std::vector<StorageT>*>(c);
+        vec.insert(vec.begin() + i, *static_cast<const StorageT*>(v));
+    };
+
+    c.eraseAt = [](void* c, size_t i) {
+        auto& vec = *static_cast<std::vector<StorageT>*>(c);
+        vec.erase(vec.begin() + i);
+    };
+
+    c.clear = [](void* c) {
+        static_cast<std::vector<StorageT>*>(c)->clear();
+    };
+
+    return c;
 }
 
-// Field reflection handler
+template<typename K, typename V, typename EditorV = V>
+Container MakeMapContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, const void*) = nullptr) {
+    Container c{};
+
+    c.elementType = GetTypeIDFromString(typeid(V).name());
+    c.elementSize = sizeof(V);
+    c.editorElementType = GetTypeIDFromString(typeid(EditorV).name());
+
+    if constexpr (std::is_same_v<V, EditorV>) {
+        c.elementRead = elementRead ? elementRead :
+            [](const void* e, void* out) {
+                *static_cast<EditorV*>(out) =
+                    *static_cast<const V*>(e);
+            };
+
+        c.elementWrite = elementWrite ? elementWrite :
+            [](void* e, const void* in) {
+                *static_cast<V*>(e) =
+                    *static_cast<const EditorV*>(in);
+            };
+    } else {
+        c.elementRead = elementRead;
+        c.elementWrite = elementWrite;
+    }
+
+    c.size = [](void* c) -> size_t {
+        return static_cast<std::map<K, V>*>(c)->size();
+    };
+
+    c.isAssociative = []() { return true; };
+
+    // sequential ops unused
+    c.getByIndex = nullptr;
+    c.insertAt = nullptr;
+    c.eraseAt = nullptr;
+
+    // associative ops
+    c.findByKey = [](void* c, const void* key) -> void* {
+        auto& m = *static_cast<std::map<K, V>*>(c);
+        auto it = m.find(*static_cast<const K*>(key));
+        return it == m.end() ? nullptr : &it->second;
+    };
+
+    c.insertByKey = [](void* c, const void* key, const void* value) {
+        auto& m = *static_cast<std::map<K, V>*>(c);
+        m[*static_cast<const K*>(key)] =
+            *static_cast<const V*>(value);
+    };
+
+    c.eraseByKey = [](void* c, const void* key) {
+        static_cast<std::map<K, V>*>(c)->erase(
+            *static_cast<const K*>(key));
+    };
+
+    c.clear = [](void* c) {
+        static_cast<std::map<K, V>*>(c)->clear();
+    };
+
+    return c;
+}
+
+QualType getInnerTypeFromStdVector(QualType type, ASTContext& Context) {
+    type = type.getCanonicalType().getUnqualifiedType();
+
+    // Make sure it's a class template specialization
+    if (const auto* recordType = type->getAs<RecordType>()) {
+        const auto* decl = recordType->getDecl();
+        if (const auto* tmplSpec = dyn_cast<ClassTemplateSpecializationDecl>(decl)) {
+            const TemplateArgument& arg = tmplSpec->getTemplateArgs()[0];
+            QualType innerType = arg.getAsType();
+
+            // Keep shared_ptr as-is
+            return innerType;
+        }
+    }
+
+    return QualType(); // failed to extract
+}
+
+std::pair<QualType, QualType> getKeyValueTypeFromStdMap(QualType type, ASTContext& Context) {
+    type = type.getCanonicalType().getUnqualifiedType();
+
+    // Make sure it's a class template specialization
+    if (const auto* recordType = type->getAs<RecordType>()) {
+        const auto* decl = recordType->getDecl();
+        if (const auto* tmplSpec = dyn_cast<ClassTemplateSpecializationDecl>(decl)) {
+            const TemplateArgumentList& argsList = tmplSpec->getTemplateArgs();
+
+            if (argsList.size() < 2)
+                return {QualType(), QualType()};
+
+            QualType keyType   = argsList[0].getAsType();
+            QualType valueType = argsList[1].getAsType();
+
+            // Keep shared_ptr or unique_ptr as-is for valueType
+            return {keyType, valueType};
+        }
+    }
+
+    return {QualType(), QualType()}; // failed to extract
+}
+
+// Field reflection haandler
 class FieldHandler : public MatchFinder::MatchCallback {
 public:
     void run(const MatchFinder::MatchResult &Result) override {
@@ -225,6 +280,8 @@ public:
             std::string equalsFuncName = "";
             std::string customTypeName = "";
             std::string range = "";
+            std::string creadFuncName = "";
+            std::string cwriteFuncName = "";
 
             for (auto *attr : field->attrs()) {
                 if (const auto *aa = dyn_cast<AnnotateAttr>(attr)) {
@@ -243,6 +300,8 @@ public:
                         else if (token.find("equals=") == 0) equalsFuncName = token.substr(7);
                         else if (token.find("type=") == 0) customTypeName = token.substr(5);
                         else if (token.find("range=") == 0) range = token.substr(6);
+                        else if (token.find("cread=") == 0) creadFuncName = token.substr(6);
+                        else if (token.find("cwrite=") == 0) cwriteFuncName = token.substr(7);
                     }
                 }
             }
@@ -269,20 +328,55 @@ public:
             std::string containerVarName = fieldName + "_container";
             std::string enumDescVar = "";
 
+            PrintingPolicy policy(Result.Context->getLangOpts());
+            policy.SuppressTagKeyword = true; // removes "class"/"struct"/"enum"
+
             if (isVector) {
-                out << "static Container " << containerVarName << " = MakeVectorContainer<"
-                    << typeName.c_str() << ">();\n";
+                std::string inner = getInnerTypeFromStdVector(field->getType(), *Result.Context).getAsString(policy);
+                
+                out << "static Container " << containerVarName
+                        << " = MakeVectorContainer<"
+                        << inner <<","<< customTypeName << ">(";
+                // elementRead
+                if (!creadFuncName.empty())
+                    out << creadFuncName<<",";
+                else
+                    out << "nullptr,";
+
+                // elementWrite
+                if (!cwriteFuncName.empty())
+                    out << cwriteFuncName;
+                else
+                    out << "nullptr";
+
+                out << ");\n";
+
             }
             else if (isMap) {
-                // extract key and value type from string "std::map<K,V>"
-                std::string inner = typeName.substr(typeName.find('<') + 1);
-                inner = inner.substr(0, inner.find('>')); // "K,V"
-                size_t comma = inner.find(',');
-                std::string keyType = inner.substr(0, comma);
-                std::string valueType = inner.substr(comma+1);
+                std::pair<QualType, QualType> keyValueType = getKeyValueTypeFromStdMap(field->getType(), *Result.Context);
 
-                out << "static Container " << containerVarName << " = MakeMapContainer<"
-                    << keyType << "," << valueType << ">();\n";
+                std::string keyType = keyValueType.first.getAsString(policy);
+                std::string valueType = keyValueType.second.getAsString(policy);
+
+                out << "static Container " << containerVarName
+                    << " = MakeMapContainer<"
+                    << keyType << ", " << valueType <<","<< customTypeName << ">(";
+
+                // elementRead
+                if (!creadFuncName.empty())
+                    out << creadFuncName;
+                else
+                    out << "nullptr";
+
+                out << ", ";
+
+                // elementWrite
+                if (!cwriteFuncName.empty())
+                    out << cwriteFuncName;
+                else
+                    out << "nullptr";
+
+                out << ");\n";
             }
             else if(isEnum) {
                 const EnumDecl* enumDecl = field->getType()->getAs<EnumType>()->getDecl();
@@ -302,9 +396,9 @@ public:
                 out << "};\n";
             }
             
-            out << "FieldInfo " << ClassDecl->getNameAsString() << "_" <<fieldName << "_info = {\n";
+            out << "inline FieldInfo " << ClassDecl->getNameAsString() << "_" <<fieldName << "_info = {\n";
             out << "    \"" << fieldName << "\",\n";
-            out << "    TypeID::" << GetStringFromTypeID(GetTypeIDFromString(customTypeName.empty() ? typeName : customTypeName)) << ",\n";
+            out << "    TypeID::" << GetStringFromTypeID(GetTypeIDFromString(customTypeName.empty() ? typeName : ((isVector || isMap || isEnum) ? typeName : customTypeName))) << ",\n";
             out << "    " << offsetBytes << ",\n";
             out << "    " << (readFuncName.empty() ? "nullptr" : readFuncName) << ",\n";
             out << "    " << (writeFuncName.empty() ? "nullptr" : writeFuncName) << ",\n";
@@ -317,7 +411,7 @@ public:
             out << "};\n\n";
         }
 
-        out << "ComponentDescriptor " << ClassDecl->getQualifiedNameAsString() << "::descriptor = {\n";
+        out << "inline ComponentDescriptor " << ClassDecl->getQualifiedNameAsString() << "::descriptor = {\n";
         out << "    \"" << ClassDecl->getNameAsString() << "\",\n";
         out << "    {\n";
 
