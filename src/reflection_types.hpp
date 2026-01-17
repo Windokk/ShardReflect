@@ -66,7 +66,9 @@ enum class TypeID : uint16_t {
 
     // User-defined / fallback
     Struct,
-    Enum
+    Enum,
+
+    Asset
 };
 
 struct EnumValueInfo {
@@ -149,6 +151,9 @@ static TypeID GetTypeIDFromString(std::string typeName) {
         // User-defined
         {"struct", TypeID::Struct},
         {"enum", TypeID::Enum},
+
+        {"AssetID", TypeID::Asset},
+        {"Pulse::Engine::Filesystem::AssetID", TypeID::Asset}
     };
 
     if (auto it = typeMap.find(typeName); it != typeMap.end())
@@ -216,6 +221,8 @@ static std::string GetStringFromTypeID(TypeID type) {
         // User-defined / fallback
         case TypeID::Struct: return "Struct";
         case TypeID::Enum: return "Enum";
+
+        case TypeID::Asset: return "Asset";
     }
 
     return "Unknown"; // fallback, should never hit
@@ -256,6 +263,8 @@ inline size_t GetTypeSize(TypeID type) {
 
         case TypeID::String: return sizeof(std::string);
         case TypeID::CString: return sizeof(char*);
+
+        case TypeID::Asset: return sizeof(int);
 
         default:
             return 0; // containers / structs handled separately

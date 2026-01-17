@@ -35,7 +35,7 @@ struct Container{
 
     // element conversion
     void (*elementRead)(const void* element, void* outEditorValue);
-    void (*elementWrite)(void* element, const void* editorValue);
+    void (*elementWrite)(void* component, void* element, const void* editorValue);
 
     // SEQUENTIAL containers (vectors)
     void* (*getByIndex)(void* container, size_t index);
@@ -85,7 +85,7 @@ struct ComponentDescriptor{
 };
 
 template<typename StorageT, typename EditorT = StorageT>
-Container MakeVectorContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, const void*) = nullptr) {
+Container MakeVectorContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, void*, const void*) = nullptr) {
     Container c{};
 
     c.elementType = GetTypeIDFromString(typeid(StorageT).name());
@@ -137,7 +137,7 @@ Container MakeVectorContainer(void (*elementRead)(const void*, void*) = nullptr,
 }
 
 template<typename K, typename V, typename EditorV = V>
-Container MakeMapContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, const void*) = nullptr) {
+Container MakeMapContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, void*, const void*) = nullptr) {
     Container c{};
 
     c.elementType = GetTypeIDFromString(typeid(V).name());
