@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <vector>
 #include <string>
+#include <memory>
 
 using namespace clang;
 using namespace clang::ast_matchers;
@@ -68,18 +69,27 @@ void CollectFiles(const std::filesystem::path &path, bool recursive, std::vector
 }
 
 class ReflectionFrontendAction : public ASTFrontendAction {
-    FieldHandler Handler;
+    FieldHandler &Handler;  // reference
     MatchFinder Finder;
+
 public:
-    ReflectionFrontendAction() {
-        Finder.addMatcher(
-            cxxRecordDecl(isDerivedFrom("Pulse::Engine::ECS::Components::Component")).bind("componentClass"),
-            &Handler
-        );
+    ReflectionFrontendAction(FieldHandler &H) : Handler(H) {
+        auto AnnotatedMatcher = cxxRecordDecl(hasAttr(attr::Annotate)).bind("record");
+        Finder.addMatcher(AnnotatedMatcher, &Handler);
     }
 
-    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override {
+    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &, StringRef) override {
         return Finder.newASTConsumer();
+    }
+};
+
+class ReflectionActionFactory : public clang::tooling::FrontendActionFactory {
+    FieldHandler &Handler; // reference to the existing handler
+public:
+    ReflectionActionFactory(FieldHandler &H) : Handler(H) {}
+
+    std::unique_ptr<clang::FrontendAction> create() override {
+        return std::make_unique<ReflectionFrontendAction>(Handler);
     }
 };
 
@@ -94,7 +104,6 @@ void Remove_duplicates(std::vector<std::string>& vec) {
 
 int main(int argc, const char **argv) {
     llvm::cl::ParseCommandLineOptions(argc, argv, "PulseReflect tool\n");
-
 
     std::vector<std::string> files;
 
@@ -153,6 +162,12 @@ int main(int argc, const char **argv) {
     FixedCompilationDatabase Compilations(".", defaultFlags);
     ClangTool Tool(Compilations, files);
 
-    FieldHandler Handler;
-    return Tool.run(newFrontendActionFactory<ReflectionFrontendAction>().get());
+    auto Handler = std::make_unique<FieldHandler>();
+
+    ReflectionActionFactory Factory(*Handler);
+    int result = Tool.run(&Factory);
+
+    Handler->writeAllFiles();
+
+    return result;
 }
