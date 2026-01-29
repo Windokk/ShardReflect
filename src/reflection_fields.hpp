@@ -457,6 +457,9 @@ private:
                 << (creadFunc.empty()  ? "nullptr" : creadFunc) << ", "
                 << (cwriteFunc.empty() ? "nullptr" : cwriteFunc)
                 << ");\n\n";
+            
+            typeName = "std::vector<";
+            customType = "std::vector<";
         }
         else if (isMap) {
             auto [K, V] = getKeyValueTypeFromStdMap(fieldType, Ctx);
@@ -470,6 +473,9 @@ private:
                 << (creadFunc.empty()  ? "nullptr" : creadFunc) << ", "
                 << (cwriteFunc.empty() ? "nullptr" : cwriteFunc)
                 << ");\n\n";
+            
+            typeName = "std::map<";
+            customType = "std::map<";
         }
         else if (isEnum) {
             const EnumDecl* E = fieldType->getAs<EnumType>()->getDecl();
@@ -478,8 +484,8 @@ private:
             out << "static EnumDescriptor " << enumDescVar << " = {\n";
             out << "    \"" << E->getNameAsString() << "\",\n    {\n";
             for (const auto* it : E->enumerators()) {
-                out << "        { \"" << it->getNameAsString()
-                    << "\", " << it->getInitVal().getSExtValue() << " },\n";
+                out << "        { " << it->getInitVal().getSExtValue()
+                    << ", ""\"" << it->getNameAsString() << "\" },\n";
             }
             out << "    }\n};\n\n";
 
