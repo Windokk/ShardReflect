@@ -369,14 +369,31 @@ private:
             }
         }
 
+        std::string structName = S->getNameAsString();
+        std::string structQualifiedName = S->getQualifiedNameAsString();
+
         out << "inline StructDescriptor "
-            << S->getNameAsString() << "_descriptor = {\n"
-            << "    \"" << S->getNameAsString() << "\",\n    {\n";
+            << structName << "_descriptor = {\n"
+            << "    \"" << structName << "\",\n"
+            << "    {\n";
 
         for (auto& f : fieldInfos)
             out << "        &" << f << ",\n";
 
-        out << "    }\n};\n";
+        out << "    },\n"
+            << "    sizeof(" << structQualifiedName << "),\n"
+            << "    [](void* p) { new (p) " << structQualifiedName << "(); },\n"
+            << "    [](void* p) { static_cast<" << structQualifiedName << "*>(p)->~"
+            << structName << "(); },\n"
+            << "    [](void* d, const void* s) {\n"
+            << "        *static_cast<" << structQualifiedName << "*>(d) =\n"
+            << "        *static_cast<const " << structQualifiedName << "*>(s);\n"
+            << "    },\n"
+            << "    [](const void* a, const void* b) {\n"
+            << "        return *static_cast<const " << structQualifiedName << "*>(a)\n"
+            << "            == *static_cast<const " <<structQualifiedName<<"*>(b);\n"
+            << "    }\n"
+            << "};\n";
 
         return out.str();
     }
@@ -440,6 +457,14 @@ private:
         bool isVector = typeName.find("std::vector") != std::string::npos;
         bool isMap    = typeName.find("std::map")    != std::string::npos;
         bool isEnum   = fieldType->isEnumeralType();
+        bool isStruct = false;
+        if (const RecordType* RT = fieldType->getAs<RecordType>()) {
+            const CXXRecordDecl* RD = dyn_cast<CXXRecordDecl>(RT->getDecl());
+            if (RD && RD->getNameAsString() == "InstancedStruct") {
+                isStruct = true;
+            }
+        }
+        const std::string structDescVar = fieldType.getAsString() + "_descriptor";
 
         std::string fieldName = F->getNameAsString();
         std::string containerVar = Parent->getNameAsString() + "_" + fieldName + "_container";
@@ -478,6 +503,7 @@ private:
             customType = "std::map<";
         }
         else if (isEnum) {
+
             const EnumDecl* E = fieldType->getAs<EnumType>()->getDecl();
             enumDescVar = E->getNameAsString() + "_descriptor";
 
@@ -487,14 +513,19 @@ private:
                 out << "        { " << it->getInitVal().getSExtValue()
                     << ", ""\"" << it->getNameAsString() << "\" },\n";
             }
-            out << "    }\n};\n\n";
+            out << "    },\n";
+            out << "    sizeof(" << fieldType.getAsString(policy) << ")\n";
+            out << "};\n\n";
 
             typeName = "enum";
         }
+        else if(isStruct){
+            
+            typeName = "struct";
+            customType = "struct";
+        }
 
         // ---------- FieldInfo ----------
-        uint32_t offset =
-            static_cast<uint32_t>(Ctx.getFieldOffset(F) / 8);
 
         out << "inline FieldInfo "
             << Parent->getNameAsString() << "_" << fieldName << "_info = {\n"
@@ -503,7 +534,11 @@ private:
             << GetStringFromTypeID(GetTypeIDFromString(
                 customType.empty() ? typeName : customType))
             << ",\n"
-            << "    " << offset << ",\n"
+            << "    offsetof(" 
+            << Parent->getQualifiedNameAsString() 
+            << ", " 
+            << fieldName 
+            << "),\n"
             << "    " << (readFunc.empty()   ? "nullptr" : readFunc) << ",\n"
             << "    " << (writeFunc.empty()  ? "nullptr" : writeFunc) << ",\n"
             << "    " << (copyFunc.empty()   ? "nullptr" : copyFunc) << ",\n"
@@ -511,7 +546,8 @@ private:
             << "    " << (isEditable ? "Editable" : "ReadOnly") << ",\n"
             << "    " << (range.empty() ? "0, 0" : range) << ",\n"
             << "    " << ((isVector || isMap) ? "&" + containerVar : "nullptr") << ",\n"
-            << "    " << (isEnum ? "&" + enumDescVar : "nullptr") << "\n};\n\n";
+            << "    " << (isEnum ? "&" + enumDescVar : "nullptr") << "\n"
+            << "};\n\n";
 
         return out.str();
     }
