@@ -152,8 +152,11 @@ static TypeID GetTypeIDFromString(std::string typeName) {
         {"struct", TypeID::Struct},
         {"enum", TypeID::Enum},
 
-        {"AssetID", TypeID::Asset},
-        {"Pulse::Engine::Filesystem::AssetID", TypeID::Asset}
+        
+        {"Pulse::Engine::Filesystem::AssetID", TypeID::Asset},
+        {"Engine::Filesystem::AssetID", TypeID::Asset},
+        {"Filesystem::AssetID", TypeID::Asset},
+        {"AssetID", TypeID::Asset}
     };
 
     if (auto it = typeMap.find(typeName); it != typeMap.end())

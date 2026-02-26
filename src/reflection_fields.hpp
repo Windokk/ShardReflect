@@ -27,28 +27,9 @@ struct Container{
     TypeID elementType;
     size_t elementSize;
 
-    TypeID editorElementType;
-
     // common queries
     size_t (*size)(void* container);
     bool   (*isAssociative)();
-
-    // element conversion
-    void (*elementRead)(const void* element, void* outEditorValue);
-    void (*elementWrite)(void* component, void* element, const void* editorValue);
-
-    // SEQUENTIAL containers (vectors)
-    void* (*getByIndex)(void* container, size_t index);
-    void  (*insertAt)(void* container, size_t index, const void* element);
-    void  (*eraseAt)(void* container, size_t index);
-
-    // ASSOCIATIVE containers (map, set)
-    void* (*findByKey)(void* container, const void* key);
-    void  (*insertByKey)(void* container, const void* key, const void* value);
-    void  (*eraseByKey)(void* container, const void* key);
-
-    // lifecycle
-    void (*clear)(void* container);
 };
 
 struct FieldInfo {
@@ -58,16 +39,6 @@ struct FieldInfo {
 
     // Memory access
     uint32_t offset;          // Offset in the struct (used if no getter/setter)
-
-    // Behavior
-
-    // Optional getter/setter functions. If nullptr, read/write directly using offset.
-    void (*read)(void* object, void* out_value);
-    void (*write)(void* object, const void* value);
-
-    // Helpers
-    void (*copy)(void* src, const void* dst);  // Copies value
-    bool (*equals)(const void* a, const void* b); // Compares values
 
     // Editor metadata
 
@@ -84,115 +55,34 @@ struct ClassDescriptor{
     std::vector<FieldInfo*> fields;
 };
 
-template<typename StorageT, typename EditorT = StorageT>
-Container MakeVectorContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, void*, const void*) = nullptr) {
+template<typename T>
+Container MakeVectorContainer() {
     Container c{};
 
-    c.elementType = GetTypeIDFromString(typeid(StorageT).name());
-    c.elementSize = sizeof(StorageT);
-    c.editorElementType = GetTypeIDFromString(typeid(EditorT).name());
-
-    if constexpr (std::is_same_v<StorageT, EditorT>) {
-        c.elementRead = elementRead ? elementRead :
-            [](const void* e, void* out) {
-                *static_cast<EditorT*>(out) =
-                    *static_cast<const StorageT*>(e);
-            };
-
-        c.elementWrite = elementWrite ? elementWrite :
-            [](void* e, const void* in) {
-                *static_cast<StorageT*>(e) =
-                    *static_cast<const EditorT*>(in);
-            };
-    } else {
-        c.elementRead = elementRead;
-        c.elementWrite = elementWrite;
-    }
+    c.elementType = GetTypeIDFromString(typeid(T).name());
+    c.elementSize = sizeof(T);
 
     c.size = [](void* c) -> size_t {
-        return static_cast<std::vector<StorageT>*>(c)->size();
+        return static_cast<std::vector<T>*>(c)->size();
     };
 
     c.isAssociative = []() { return false; };
 
-    c.getByIndex = [](void* c, size_t i) -> void* {
-        return &(*static_cast<std::vector<StorageT>*>(c))[i];
-    };
-
-    c.insertAt = [](void* c, size_t i, const void* v) {
-        auto& vec = *static_cast<std::vector<StorageT>*>(c);
-        vec.insert(vec.begin() + i, *static_cast<const StorageT*>(v));
-    };
-
-    c.eraseAt = [](void* c, size_t i) {
-        auto& vec = *static_cast<std::vector<StorageT>*>(c);
-        vec.erase(vec.begin() + i);
-    };
-
-    c.clear = [](void* c) {
-        static_cast<std::vector<StorageT>*>(c)->clear();
-    };
-
     return c;
 }
 
-template<typename K, typename V, typename EditorV = V>
-Container MakeMapContainer(void (*elementRead)(const void*, void*) = nullptr,void (*elementWrite)(void*, void*, const void*) = nullptr) {
+template<typename K, typename V>
+Container MakeMapContainer() {
     Container c{};
 
     c.elementType = GetTypeIDFromString(typeid(V).name());
     c.elementSize = sizeof(V);
-    c.editorElementType = GetTypeIDFromString(typeid(EditorV).name());
-
-    if constexpr (std::is_same_v<V, EditorV>) {
-        c.elementRead = elementRead ? elementRead :
-            [](const void* e, void* out) {
-                *static_cast<EditorV*>(out) =
-                    *static_cast<const V*>(e);
-            };
-
-        c.elementWrite = elementWrite ? elementWrite :
-            [](void* e, const void* in) {
-                *static_cast<V*>(e) =
-                    *static_cast<const EditorV*>(in);
-            };
-    } else {
-        c.elementRead = elementRead;
-        c.elementWrite = elementWrite;
-    }
 
     c.size = [](void* c) -> size_t {
         return static_cast<std::map<K, V>*>(c)->size();
     };
 
     c.isAssociative = []() { return true; };
-
-    // sequential ops unused
-    c.getByIndex = nullptr;
-    c.insertAt = nullptr;
-    c.eraseAt = nullptr;
-
-    // associative ops
-    c.findByKey = [](void* c, const void* key) -> void* {
-        auto& m = *static_cast<std::map<K, V>*>(c);
-        auto it = m.find(*static_cast<const K*>(key));
-        return it == m.end() ? nullptr : &it->second;
-    };
-
-    c.insertByKey = [](void* c, const void* key, const void* value) {
-        auto& m = *static_cast<std::map<K, V>*>(c);
-        m[*static_cast<const K*>(key)] =
-            *static_cast<const V*>(value);
-    };
-
-    c.eraseByKey = [](void* c, const void* key) {
-        static_cast<std::map<K, V>*>(c)->erase(
-            *static_cast<const K*>(key));
-    };
-
-    c.clear = [](void* c) {
-        static_cast<std::map<K, V>*>(c)->clear();
-    };
 
     return c;
 }
@@ -344,7 +234,7 @@ private:
         return out.str();
     }
 
-    std::string  handleStruct(const CXXRecordDecl* S, const clang::SourceManager &SM){
+    std::string handleStruct(const CXXRecordDecl* S, const clang::SourceManager &SM){
         if (!S || !S->isThisDeclarationADefinition())
             return {};
 
@@ -414,7 +304,6 @@ private:
         bool isReadOnly = false;
 
         std::string readFunc, writeFunc, copyFunc, equalsFunc;
-        std::string customType;
         std::string range;
         std::string creadFunc, cwriteFunc;
 
@@ -435,7 +324,6 @@ private:
                     else if (token.find("write=") == 0)  writeFunc  = token.substr(6);
                     else if (token.find("copy=") == 0)   copyFunc   = token.substr(5);
                     else if (token.find("equals=") == 0) equalsFunc = token.substr(7);
-                    else if (token.find("type=") == 0)   customType = token.substr(5);
                     else if (token.find("range=") == 0)  range      = token.substr(6);
                     else if (token.find("cread=") == 0)  creadFunc  = token.substr(6);
                     else if (token.find("cwrite=") == 0) cwriteFunc = token.substr(7);
@@ -477,30 +365,18 @@ private:
 
             out << "static Container " << containerVar
                 << " = MakeVectorContainer<"
-                << inner << ", " << (customType.empty() ? inner : customType)
-                << ">("
-                << (creadFunc.empty()  ? "nullptr" : creadFunc) << ", "
-                << (cwriteFunc.empty() ? "nullptr" : cwriteFunc)
-                << ");\n\n";
+                << inner << ">();\n\n";
             
             typeName = "std::vector<";
-            customType = "std::vector<";
         }
         else if (isMap) {
             auto [K, V] = getKeyValueTypeFromStdMap(fieldType, Ctx);
 
             out << "static Container " << containerVar
                 << " = MakeMapContainer<"
-                << K.getAsString(policy) << ", "
-                << V.getAsString(policy) << ", "
-                << (customType.empty() ? V.getAsString(policy) : customType)
-                << ">("
-                << (creadFunc.empty()  ? "nullptr" : creadFunc) << ", "
-                << (cwriteFunc.empty() ? "nullptr" : cwriteFunc)
-                << ");\n\n";
+                << K.getAsString(policy) << "," << V.getAsString(policy)<< ");\n\n";
             
             typeName = "std::map<";
-            customType = "std::map<";
         }
         else if (isEnum) {
 
@@ -522,7 +398,6 @@ private:
         else if(isStruct){
             
             typeName = "struct";
-            customType = "struct";
         }
 
         // ---------- FieldInfo ----------
@@ -531,22 +406,21 @@ private:
             << Parent->getNameAsString() << "_" << fieldName << "_info = {\n"
             << "    \"" << fieldName << "\",\n"
             << "    TypeID::"
-            << GetStringFromTypeID(GetTypeIDFromString(
-                customType.empty() ? typeName : customType))
+            << GetStringFromTypeID(GetTypeIDFromString(typeName))
             << ",\n"
             << "    offsetof(" 
             << Parent->getQualifiedNameAsString() 
             << ", " 
             << fieldName 
             << "),\n"
-            << "    " << (readFunc.empty()   ? "nullptr" : readFunc) << ",\n"
-            << "    " << (writeFunc.empty()  ? "nullptr" : writeFunc) << ",\n"
-            << "    " << (copyFunc.empty()   ? "nullptr" : copyFunc) << ",\n"
-            << "    " << (equalsFunc.empty() ? "nullptr" : equalsFunc) << ",\n"
             << "    " << (isEditable ? "Editable" : "ReadOnly") << ",\n"
             << "    " << (range.empty() ? "0, 0" : range) << ",\n"
             << "    " << ((isVector || isMap) ? "&" + containerVar : "nullptr") << ",\n"
-            << "    " << (isEnum ? "&" + enumDescVar : "nullptr") << "\n"
+            << "    " << (isEnum ? "&" + enumDescVar : "nullptr") << ",\n"
+            << "    " << "&CopyConstruct<" << fieldType.getAsString(policy) << ">,\n"
+            << "    " << "&Assign<" << fieldType.getAsString(policy) << ">,\n"
+            << "    " << "&Destroy<" << fieldType.getAsString(policy) << ">,\n"
+            << "    " << "&Equals<" << fieldType.getAsString(policy) << ">\n"
             << "};\n\n";
 
         return out.str();
