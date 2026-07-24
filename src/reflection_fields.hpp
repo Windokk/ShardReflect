@@ -305,7 +305,6 @@ private:
 
         std::string readFunc, writeFunc, copyFunc, equalsFunc;
         std::string range;
-        std::string creadFunc, cwriteFunc;
 
         for (const Attr* attr : F->attrs()) {
             if (const auto* aa = dyn_cast<AnnotateAttr>(attr)) {
@@ -324,9 +323,15 @@ private:
                     else if (token.find("write=") == 0)  writeFunc  = token.substr(6);
                     else if (token.find("copy=") == 0)   copyFunc   = token.substr(5);
                     else if (token.find("equals=") == 0) equalsFunc = token.substr(7);
-                    else if (token.find("range=") == 0)  range      = token.substr(6);
-                    else if (token.find("cread=") == 0)  creadFunc  = token.substr(6);
-                    else if (token.find("cwrite=") == 0) cwriteFunc = token.substr(7);
+                    else if (token.find("range=") == 0) {
+                        std::string r = token.substr(6);
+                        auto pos = r.find('|');
+                        if (pos != std::string::npos) {
+                            std::string min = r.substr(0, pos);
+                            std::string max = r.substr(pos + 1);
+                            range = min + ", " + max;
+                        }
+                    }
                 }
             }
         }
