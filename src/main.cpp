@@ -159,15 +159,19 @@ int main(int argc, const char **argv) {
         llvm::outs() << "Generating reflection for file: " << file << "\n";
     }
 
-    FixedCompilationDatabase Compilations(".", defaultFlags);
-    ClangTool Tool(Compilations, files);
+    FixedCompilationDatabase compilations(".", defaultFlags);
+    ClangTool tool(compilations, files);
 
-    auto Handler = std::make_unique<FieldHandler>();
+    ArgumentsAdjuster adjuster = getInsertArgumentAdjuster(
+    "-fgnu-keywords", ArgumentInsertPosition::BEGIN);
+    tool.appendArgumentsAdjuster(adjuster);
 
-    ReflectionActionFactory Factory(*Handler);
-    int result = Tool.run(&Factory);
+    auto handler = std::make_unique<FieldHandler>();
 
-    Handler->writeAllFiles();
+    ReflectionActionFactory factory(*handler);
+    int result = tool.run(&factory);
+
+    handler->writeAllFiles();
 
     return result;
 }

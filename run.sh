@@ -1,11 +1,11 @@
 cd build
 ./PulseReflect --clang /usr/lib/clang/21 \
                --cpp /usr/include/c++/15.2.1 \
-               -f ../../Pulse/src/engine/ecs/components/misc/transform.hpp \
-               --dir ../../Pulse/src/engine/ecs/components/misc/ \
-               --dir ../../Pulse/src/engine/ecs/components/rendering/ \
-               --dir ../../Pulse/src/engine/ecs/components/physics/ \
-               --dir ../../Pulse/src/engine/ecs/components/audio/ \
+               -f ../../Pulse/src/engine/objects/components/misc/transform.hpp \
+               --dir ../../Pulse/src/engine/objects/components/misc/ \
+               --dir ../../Pulse/src/engine/objects/components/rendering/ \
+               --dir ../../Pulse/src/engine/objects/components/physics/ \
+               --dir ../../Pulse/src/engine/objects/components/audio/ \
                -I "../../Pulse/src;../../Pulse/submodules/;../../Pulse/submodules/json/single_include" \
                -I ../../Pulse/submodules/jolt \
                -I ../../Pulse/submodules/glm \

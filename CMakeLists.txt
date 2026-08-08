@@ -15,12 +15,14 @@ find_package(Clang REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in ${LLVM_DIR}")
 
+llvm_map_components_to_libnames(llvm_libs support core irreader)
+
 set(GCC_INC_DIR "" CACHE PATH "Path to gcc's include dir")
 
 include_directories(${LLVM_INCLUDE_DIRS} ${GCC_INC_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 
-# Your executable
+# Executable
 add_executable(PulseReflect src/main.cpp)
 
 # Disable RTTI if needed
@@ -28,7 +30,11 @@ add_executable(PulseReflect src/main.cpp)
 
 # Link clang tooling
 target_link_libraries(PulseReflect
-    PRIVATE
-    LLVM
-    clang-cpp
+  PRIVATE
+    clangTooling
+    clangASTMatchers
+    clangAST
+    clangBasic
+    clangFrontend
+    ${llvm_libs}
 )
