@@ -153,7 +153,7 @@ static TypeID GetTypeIDFromString(std::string typeName) {
         {"enum", TypeID::Enum},
 
         
-        {"Pulse::Engine::Filesystem::AssetID", TypeID::Asset},
+        {"Shard::Engine::Filesystem::AssetID", TypeID::Asset},
         {"Engine::Filesystem::AssetID", TypeID::Asset},
         {"Filesystem::AssetID", TypeID::Asset},
         {"AssetID", TypeID::Asset}

@@ -10,7 +10,7 @@ using namespace clang::ast_matchers;
 using namespace clang::tooling;
 namespace fs = std::filesystem;
 
-static llvm::cl::OptionCategory ToolCategory("pulse-reflect options");
+static llvm::cl::OptionCategory ToolCategory("shard-reflect options");
 static llvm::cl::opt<std::string> FileOpt("f", llvm::cl::desc("Single file"));
 static llvm::cl::list<std::string> DirList("dir", llvm::cl::desc("Directory to scan (can specify multiple)"), llvm::cl::ZeroOrMore);
 static llvm::cl::opt<bool> RecursiveOpt("recursive", llvm::cl::desc("Recurse into directories"));
@@ -103,7 +103,7 @@ void Remove_duplicates(std::vector<std::string>& vec) {
 }
 
 int main(int argc, const char **argv) {
-    llvm::cl::ParseCommandLineOptions(argc, argv, "PulseReflect tool\n");
+    llvm::cl::ParseCommandLineOptions(argc, argv, "ShardReflect tool\n");
 
     std::vector<std::string> files;
 

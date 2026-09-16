@@ -1,6 +1,6 @@
-# PulseReflect
+# ShardReflect
 
-A reflection tool for the Pulse Game Engine
+A reflection tool for the Shard Game Engine
 
 Works for Linux and Windows (MinGW)
 
@@ -8,10 +8,7 @@ Works for Linux and Windows (MinGW)
 
 - LLVM
 - Clang
-
-## Example : 
-
-./run.sh or ./run.bat
+- Zlib
 
 ## CLI options
 
@@ -25,4 +22,4 @@ Works for Linux and Windows (MinGW)
 
 --cpp : Path to the stdlibc++ root (usually /usr/include/c++/<version> on Linux) (mandatory)
 
--I : Path to the include dir of Pulse (usually <Path/To/Pulse>/src)
+-I : Path to the include dir of Shard (usually <Path/To/Shard>/src)
